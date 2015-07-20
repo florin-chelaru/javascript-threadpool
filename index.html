@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <meta charset="UTF-8">
+  <title></title>
+  <script src="closure-library/closure/goog/base.js"></script>
+  <script src="deps.js"></script>
+  <script src="src/parallel/thread-pool.js"></script>
+</head>
+<body>
+  <button onclick="start()">Start</button>
+  <button onclick="">Button 1</button>
+  <button onclick="">Button 2</button>
+  <output id="result"></output>
+
+  <script>
+    PARALLEL_BASE_PATH = '/parallel/src/parallel/';
+    var tp = null;
+
+    function start() {
+      tp = tp || new parallel.ThreadPool(16);
+      var njobs = 100;
+      var count = njobs;
+      var n = 100000;
+      var startTime = new Date();
+      for (var i = 0; i < njobs; ++i) {
+        tp.queue(
+          function(n) {
+            var ret = [];
+            for (var i = 0; i < n; ++i) {
+              ret.push(Math.floor(Math.random() * 10));
+            }
+            return ret;
+          },
+          [n],
+          function(arr) {
+            tp.queue(function(arr) {
+              return arr.reduce(function(x, y) { return x + y; });
+            }, [arr], function(sum) {
+              --count;
+              if (count == 0) {
+                console.log('Time elapsed: ' + (new Date() - startTime));
+              }
+            });
+          })
+      }
+    }
+  </script>
+</body>
+</html>
