@@ -18,31 +18,30 @@
     var tp = null;
 
     function start() {
-      tp = tp || new parallel.ThreadPool(16);
-      var njobs = 100;
+      tp = tp || new parallel.ThreadPool(10);
+      var njobs = 10;
       var count = njobs;
       var n = 100000;
       var startTime = new Date();
       for (var i = 0; i < njobs; ++i) {
-        tp.queue(
-          function(n) {
-            var ret = [];
-            for (var i = 0; i < n; ++i) {
-              ret.push(Math.floor(Math.random() * 10));
-            }
-            return ret;
-          },
-          [n],
-          function(arr) {
+        tp.queue(function(n) {
+          var ret = [];
+          for (var i = 0; i < n; ++i) {
+            ret.push(Math.floor(Math.random() * 10));
+          }
+          return ret;
+        }, [n])
+          .then(function(arr) {
             tp.queue(function(arr) {
               return arr.reduce(function(x, y) { return x + y; });
-            }, [arr], function(sum) {
-              --count;
-              if (count == 0) {
-                console.log('Time elapsed: ' + (new Date() - startTime));
-              }
-            });
-          })
+            }, [arr])
+              .then(function(sum) {
+                --count;
+                if (count == 0) {
+                  console.log('Time elapsed: ' + (new Date() - startTime));
+                }
+              });
+          });
       }
     }
   </script>

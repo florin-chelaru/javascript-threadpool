@@ -38,13 +38,13 @@ parallel.ThreadPool = function(maxThreads) {
 };
 
 /**
- * @param func
- * @param args
- * @param callback
+ * @param {function} func
+ * @param {Array} [args]
+ * @returns {goog.async.Deferred}
  */
-parallel.ThreadPool.prototype.queue = function(func, args, callback) {
+parallel.ThreadPool.prototype.queue = function(func, args) {
   var thread = this.getAvailableThread();
-  thread.queue(func, args, callback);
+  return thread.queue(func, args);
 };
 
 /**

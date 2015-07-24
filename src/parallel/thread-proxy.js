@@ -9,6 +9,8 @@ goog.provide('parallel.ThreadProxy');
 goog.require('parallel.ThreadMessage');
 goog.require('parallel.events.Event');
 
+goog.require('goog.async.Deferred');
+
 /**
  * @param {string|number} id
  * @constructor
@@ -31,6 +33,12 @@ parallel.ThreadProxy = function(id) {
    * @private
    */
   this._callbacks = {};
+
+  /**
+   * @type {Object.<number, goog.async.Deferred>}
+   * @private
+   */
+  this._deferreds = {};
 
   /**
    * @type {number}
@@ -87,16 +95,20 @@ parallel.ThreadProxy.prototype.isIdle = function() { return this._isIdle; };
 parallel.ThreadProxy.prototype.isStarted = function() { return this._isStarted; };
 
 /**
- * @param func
- * @param args
- * @param callback
+ * @param {function} func
+ * @param {Array} [args]
+ * @returns {goog.async.Deferred}
  */
-parallel.ThreadProxy.prototype.queue = function(func, args, callback) {
+parallel.ThreadProxy.prototype.queue = function(func, args) {
   var id = ++this._lastCallbackId;
-  this._callbacks[id] = callback;
+  //this._callbacks[id] = callback;
+  var deferred = new goog.async.Deferred();
+  this._deferreds[id] = deferred;
   ++this._pendingJobCount;
   this._isIdle = false;
   this._worker.postMessage(new parallel.ThreadMessage(this._id, id, 'call', { func: func.toString(), args: args }));
+
+  return deferred;
 };
 
 /**
@@ -117,15 +129,20 @@ parallel.ThreadProxy.prototype._onMessage = function(e) {
       this._started.fire(msg);
       break;
     case 'response':
-      var callback = this._callbacks[msg.id];
+      /*var callback = this._callbacks[msg.id];
       if (callback == undefined) { return; }
 
-      delete this._callbacks[msg.id];
+      delete this._callbacks[msg.id];*/
+      var deferred = this._deferreds[msg.id];
+      if (deferred == undefined) { return; }
+      delete this._deferreds[msg.id];
+
       --this._pendingJobCount;
       if (this._pendingJobCount == 0) { this._isIdle = true; }
-      setTimeout(function() {
+      /*setTimeout(function() {
         callback(msg.data);
-      }, 0);
+      }, 0);*/
+      deferred.callback(msg.data);
       break;
   }
 };
