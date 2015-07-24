@@ -10,6 +10,9 @@ goog.provide('parallel.Thread');
 
 goog.require('utils');
 goog.require('parallel.ThreadMessage');
+goog.require('parallel.shared.ObjectProxy');
+
+goog.require('parallel.shared.Array');
 
 /**
  * @param {WorkerGlobalScope} context
@@ -28,6 +31,12 @@ parallel.Thread = function(context) {
    */
   this._context = context;
 
+  /**
+   * @type {Object.<number, *>}
+   * @private
+   */
+  this._sharedObjects = {};
+
   this._init();
 };
 
@@ -40,10 +49,10 @@ parallel.Thread.prototype._init = function() {
     /** @type {parallel.ThreadMessage} */
     var msg = e.data;
     switch (msg.action) {
-      /*case 'load':
+      case 'load':
         var file = data.msg;
         importScripts(DOMAIN_BASE_PATH + file);
-        break;*/
+        break;
       case 'start':
         self._id = msg.threadId;
         context.postMessage(new parallel.ThreadMessage(self._id, msg.id, 'started'));
@@ -53,14 +62,40 @@ parallel.Thread.prototype._init = function() {
         break;
       case 'call':
         var id = msg.id;
-        var funcArgs = msg.data['args'];
+        var args = msg.data['args'];
+        if (args) {
+          args = args.map(function(arg) { return arg.__id !== undefined ? self.getShared(arg) : arg; });
+        }
         var func = null;
         if (msg.data['func']) {
           func = eval('(' + msg.data['func'] + ')');
         } else {
           func = utils.evaluateFullyQualifiedTypeName(msg.data['funcName'], context);
         }
-        var result = func.apply(null, funcArgs);
+        var result = func.apply(null, args);
+        context.postMessage(new parallel.ThreadMessage(self._id, msg.id, 'response', result));
+        break;
+      case 'createShared':
+        var objId = msg.data['id'];
+        var typeName = msg.data['type'];
+        var ctor = utils.evaluateFullyQualifiedTypeName(typeName, context);
+        var args = msg.data['args'];
+        if (args) {
+          args = args.map(function(arg) { return arg.__id !== undefined ? self.getShared(arg) : arg; });
+        }
+        var obj = utils.applyConstructor(ctor, args);
+        self._sharedObjects[objId] = {typeName: typeName, type: ctor, object: obj};
+        context.postMessage(new parallel.ThreadMessage(self._id, msg.id, 'created', objId));
+        break;
+      case 'callShared':
+        var shared = self._sharedObjects[msg.data['target']];
+        var target = shared.object;
+        var method = shared.type.prototype[msg.data['method']];
+        var args = msg.data['args'];
+        if (args) {
+          args = args.map(function(arg) { return arg.__id !== undefined ? self.getShared(arg) : arg; });
+        }
+        var result = method.apply(target, args);
         context.postMessage(new parallel.ThreadMessage(self._id, msg.id, 'response', result));
         break;
       default:
@@ -69,4 +104,10 @@ parallel.Thread.prototype._init = function() {
   });
 };
 
-new parallel.Thread(self);
+/**
+ * @param {parallel.shared.ObjectProxy} proxy
+ * @returns {*}
+ */
+parallel.Thread.prototype.getShared = function(proxy) { return this._sharedObjects[proxy.__id].object; };
+
+self.thread = new parallel.Thread(self);

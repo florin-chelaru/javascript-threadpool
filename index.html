@@ -8,41 +8,62 @@
   <script src="src/parallel/thread-pool.js"></script>
 </head>
 <body>
-  <button onclick="start()">Start</button>
-  <button onclick="">Button 1</button>
+  <button onclick="start(100, 1000000)">Start</button>
+  <button onclick="startSameThread(100, 1000000)">Start Same Thread</button>
   <button onclick="">Button 2</button>
   <output id="result"></output>
 
   <script>
+    goog.require('parallel.shared.Array');
+
     PARALLEL_BASE_PATH = '/parallel/src/parallel/';
     var tp = null;
 
-    function start() {
-      tp = tp || new parallel.ThreadPool(10);
-      var njobs = 10;
+    function start(njobs, n) {
+      tp = tp || new parallel.ThreadPool(16);
+
       var count = njobs;
-      var n = 100000;
       var startTime = new Date();
       for (var i = 0; i < njobs; ++i) {
-        tp.queue(function(n) {
-          var ret = [];
-          for (var i = 0; i < n; ++i) {
-            ret.push(Math.floor(Math.random() * 10));
-          }
-          return ret;
-        }, [n])
-          .then(function(arr) {
-            tp.queue(function(arr) {
+        var thread = tp.getAvailableThread();
+        var arr = thread.createShared('parallel.shared.Array');
+
+        (function(thread, arr) {
+          thread.queue(function(arr, n) {
+            for (var i = 0; i < n; ++i) {
+              arr.push(Math.floor(Math.random() * 10));
+            }
+          }, [arr, n])
+          .then(function() {
+            return thread.queue(function(arr) {
               return arr.reduce(function(x, y) { return x + y; });
-            }, [arr])
-              .then(function(sum) {
-                --count;
-                if (count == 0) {
-                  console.log('Time elapsed: ' + (new Date() - startTime));
-                }
-              });
+            }, [arr]);
+          })
+          .then(function(sum) {
+            arr.join(',').then(function(joined) {
+              //console.log('sum[' + joined + ']=' + sum);
+              --count;
+              if (count == 0) {
+                console.log('Time elapsed: ' + (new Date() - startTime));
+              }
+            });
           });
+        })(thread, arr);
       }
+    }
+
+    function startSameThread(njobs, n) {
+      var startTime = new Date();
+      for (var i = 0; i < njobs; ++i) {
+        var arr = [];
+        for (var j = 0; j < n; ++j) {
+          arr.push(Math.floor(Math.random() * 10));
+        }
+        var sum = arr.reduce(function(x, y) { return x+y; });
+        var joined = arr.join(',');
+        //console.log('sum[' + joined + ']=' + sum);
+      }
+      console.log('Time elapsed: ' + (new Date() - startTime));
     }
   </script>
 </body>

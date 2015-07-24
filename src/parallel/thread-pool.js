@@ -7,6 +7,7 @@
 goog.provide('parallel.ThreadPool');
 
 goog.require('parallel.ThreadProxy');
+goog.require('parallel.shared.ObjectProxy');
 
 var PARALLEL_BASE_PATH = PARALLEL_BASE_PATH || '/';
 
@@ -19,8 +20,6 @@ parallel.ThreadPool = function(maxThreads) {
   if (maxThreads <= 0) {
     throw Error('Invalid ThreadPool parameter maxThreads = ' + maxThreads);
   }
-
-  var self = this;
 
   /**
    * @type {number}
@@ -35,16 +34,6 @@ parallel.ThreadPool = function(maxThreads) {
   this._threads = [];
   this._threads.push(new parallel.ThreadProxy(0));
   this._threads[0].start();
-};
-
-/**
- * @param {function} func
- * @param {Array} [args]
- * @returns {goog.async.Deferred}
- */
-parallel.ThreadPool.prototype.queue = function(func, args) {
-  var thread = this.getAvailableThread();
-  return thread.queue(func, args);
 };
 
 /**

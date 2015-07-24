@@ -62,3 +62,18 @@ utils.applyConstructor = function(ctor, params) {
 
   return obj;
 };
+
+/**
+ * @param {Arguments} args
+ * @returns {Array}
+ */
+utils.argumentsToArray = function(args) {
+  var ret = [];
+  if (args.length == 0) { return ret; }
+
+  for (var i = 0; i < args.length; ++i) {
+    ret[i] = args[i];
+  }
+
+  return ret;
+};
