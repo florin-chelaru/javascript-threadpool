@@ -40,13 +40,14 @@
             }, [arr]);
           })
           .then(function(sum) {
-            arr.join(',').then(function(joined) {
-              //console.log('sum[' + joined + ']=' + sum);
-              --count;
-              if (count == 0) {
-                console.log('Time elapsed: ' + (new Date() - startTime));
-              }
-            });
+            return arr.join(',');
+          })
+          .then(function(joined) {
+            //console.log('sum[' + joined + ']=' + sum);
+            --count;
+            if (count == 0) {
+              console.log('Time elapsed: ' + (new Date() - startTime));
+            }
           });
         })(thread, arr);
       }
