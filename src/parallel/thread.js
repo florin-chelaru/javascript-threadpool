@@ -12,8 +12,6 @@ goog.require('utils');
 goog.require('parallel.ThreadMessage');
 goog.require('parallel.shared.ObjectProxy');
 
-goog.require('parallel.shared.Array');
-
 /**
  * @param {WorkerGlobalScope} context
  * @constructor
@@ -50,8 +48,14 @@ parallel.Thread.prototype._init = function() {
     var msg = e.data;
     switch (msg.action) {
       case 'load':
-        var file = data.msg;
-        importScripts(DOMAIN_BASE_PATH + file);
+        var file = msg.data['file'];
+        if (file != undefined) {
+          importScripts(DOMAIN_BASE_PATH + file);
+        }
+        var resource = msg.data['resource'];
+        if (resource != undefined) {
+          goog.require(resource);
+        }
         break;
       case 'start':
         self._id = msg.threadId;
@@ -78,7 +82,21 @@ parallel.Thread.prototype._init = function() {
       case 'createShared':
         var objId = msg.data['id'];
         var typeName = msg.data['type'];
-        var ctor = utils.evaluateFullyQualifiedTypeName(typeName, context);
+        var ctor = null;
+
+        try {
+          ctor = utils.evaluateFullyQualifiedTypeName(typeName, context);
+        } catch (err) {
+          goog.require(typeName);
+
+          try{
+            ctor = utils.evaluateFullyQualifiedTypeName(typeName, context);
+          } catch (err) {
+            console.error('Resource ' + typeName + ' not found.');
+            break;
+          }
+        }
+
         var args = msg.data['args'];
         if (args) {
           args = args.map(function(arg) { return arg.__id !== undefined ? self.getShared(arg) : arg; });

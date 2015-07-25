@@ -14,25 +14,19 @@ goog.provide('utils');
  * @template T
  */
 utils.evaluateFullyQualifiedTypeName = function(typeName, context) {
-  try {
-    if (context == undefined) { context = window; }
-    var namespaces = typeName.split('.');
-    var func = namespaces.pop();
-    for (var i = 0; i < namespaces.length; ++i) {
-      context = context[namespaces[i]];
-    }
-
-    var result = context[func];
-    if (typeof(result) !== 'function') {
-      console.error('Unknown type name: ' + typeName);
-      return null;
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Unknown type name: ' + typeName);
-    return null;
+  if (context == undefined) { context = window; }
+  var namespaces = typeName.split('.');
+  var func = namespaces.pop();
+  for (var i = 0; i < namespaces.length; ++i) {
+    context = context[namespaces[i]];
   }
+
+  var result = context[func];
+  if (typeof(result) !== 'function') {
+    throw new Error('Unknown type name: ' + typeName);
+  }
+
+  return result;
 };
 
 /**
