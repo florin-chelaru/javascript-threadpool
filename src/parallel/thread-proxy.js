@@ -77,6 +77,12 @@ parallel.ThreadProxy = function(id) {
    * @private
    */
   this._started = new parallel.events.Event();
+
+  /**
+   * @type {parallel.events.Event.<parallel.ThreadMessage>}
+   * @private
+   */
+  this._jobFinished = new parallel.events.Event();
 };
 
 /**
@@ -107,7 +113,7 @@ parallel.ThreadProxy.prototype.isStarted = function() { return this._isStarted; 
  * @param {Array} [args]
  * @returns {goog.async.Deferred}
  */
-parallel.ThreadProxy.prototype.queue = function(func, args) {
+parallel.ThreadProxy.prototype.run = function(func, args) {
   var id = ++this._lastCallbackId;
   args = args ? args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
   var deferred = new goog.async.Deferred();
@@ -133,6 +139,8 @@ parallel.ThreadProxy.prototype.createShared = function(typeName, args) {
     self._deferreds[id] = e.deferred;
     var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
 
+    ++self._pendingJobCount;
+    self._isIdle = false;
     self._worker.postMessage(new parallel.ThreadMessage(self._id, id, 'callShared',
       {
         target: e.target.__id,
@@ -144,15 +152,21 @@ parallel.ThreadProxy.prototype.createShared = function(typeName, args) {
 
   this._sharedObjects[proxy.__id] = proxy;
   args = args ? args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
+
   this._worker.postMessage(new parallel.ThreadMessage(this._id, ++this._lastCallbackId, 'createShared', {id: proxy.__id, type: typeName, args: args}));
 
   return proxy;
 };
 
 /**
- * @returns {parallel.events.Event}
+ * @returns {parallel.events.Event.<parallel.ThreadMessage>}
  */
 parallel.ThreadProxy.prototype.onStarted = function() { return this._started; };
+
+/**
+ * @returns {parallel.events.Event.<parallel.ThreadMessage>}
+ */
+parallel.ThreadProxy.prototype.onJobFinished = function() { return this._jobFinished; };
 
 /**
  * @param {MessageEvent} e
@@ -178,6 +192,9 @@ parallel.ThreadProxy.prototype._onMessage = function(e) {
       --this._pendingJobCount;
       if (this._pendingJobCount == 0) { this._isIdle = true; }
       deferred.callback(msg.data);
+
+      this._jobFinished.fire(msg);
+
       break;
   }
 };

@@ -33,7 +33,18 @@ parallel.ThreadPool = function(maxThreads) {
    */
   this._threads = [];
   this._threads.push(new parallel.ThreadProxy(0));
+
+  var self = this;
+  this._threads[0].onJobFinished().addListener(new parallel.events.EventListener(function(msg) {
+    self._jobFinished(msg);
+  }));
   this._threads[0].start();
+
+  /**
+   * @type {Array.<{job: function(parallel.ThreadProxy):goog.async.Deferred, deferred: goog.async.Deferred}>}
+   * @private
+   */
+  this._jobs = [];
 };
 
 /**
@@ -55,12 +66,30 @@ parallel.ThreadPool.prototype.getAvailableThread = function() {
   if (this._threads.length < this._maxThreads) {
     thread = new parallel.ThreadProxy(this._threads.length);
     this._threads.push(thread);
+
+    var self = this;
+    thread.onJobFinished().addListener(new parallel.events.EventListener(function(msg) {
+      self._jobFinished(msg);
+    }));
     thread.start();
     return thread;
   }
 
-  var index = Math.floor(Math.random() * this._maxThreads);
-  return this._threads[index];
+  return null;
+};
+
+/**
+ * @param {function(parallel.ThreadProxy):goog.async.Deferred} job
+ */
+parallel.ThreadPool.prototype.queue = function(job) {
+  var self = this;
+  var thread = self.getAvailableThread();
+  if (thread !== null) { return job.call(null, thread); }
+
+  var deferred = new goog.async.Deferred();
+  this._jobs.push({job: job, deferred: deferred});
+
+  return deferred;
 };
 
 /**
@@ -75,10 +104,20 @@ parallel.ThreadPool.prototype._onMessage = function(e) {
   }
 };
 
-parallel.ThreadPool.prototype._threadStart = function() {
-  var worker = new Worker(PARALLEL_BASE_PATH + 'thread.js');
+/**
+ * @param {parallel.ThreadMessage} msg
+ * @private
+ */
+parallel.ThreadPool.prototype._jobFinished = function(msg) {
+  if (this._jobs.length == 0) { return; }
 
-  this._workers[i].onmessage = function(e) {
-    self._onMessage(e);
-  };
+  var tuple = this._jobs.shift();
+  var job = tuple.job;
+  var deferred = tuple.deferred;
+  var threadId = msg.threadId;
+  var thread = this._threads[threadId];
+
+  job.call(null, thread).then(function() {
+    deferred.callback(arguments);
+  });
 };

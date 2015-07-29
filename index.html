@@ -8,8 +8,8 @@
   <script src="src/parallel/thread-pool.js"></script>
 </head>
 <body>
-  <button onclick="start(10, 10)">Start</button>
-  <button onclick="startSameThread(10, 10)">Start Same Thread</button>
+  <button onclick="start(100, 100000)">Start</button>
+  <button onclick="startSameThread(100, 100000)">Start Same Thread</button>
   <button onclick="">Button 2</button>
   <output id="result"></output>
 
@@ -25,31 +25,31 @@
       var count = njobs;
       var startTime = new Date();
       for (var i = 0; i < njobs; ++i) {
-        var thread = tp.getAvailableThread();
-        var arr = thread.createShared('parallel.shared.Array');
-
-        (function(thread, arr) {
-          thread.queue(function(arr, n) {
-            for (var i = 0; i < n; ++i) {
-              arr.push(Math.floor(Math.random() * 10));
-            }
-          }, [arr, n])
-          .then(function() {
-            return thread.queue(function(arr) {
-              return arr.reduce(function(x, y) { return x + y; });
-            }, [arr]);
-          })
-          .then(function(sum) {
-            return arr.join(',');
-          })
-          .then(function(joined) {
-            //console.log('sum[' + joined + ']=' + sum);
-            --count;
-            if (count == 0) {
-              alert('[Multi thread] Time elapsed: ' + (new Date() - startTime));
-            }
-          });
-        })(thread, arr);
+        tp.queue(function(thread) {
+          var arr = thread.createShared('parallel.shared.Array');
+          return thread
+            .run(function(arr, n) {
+              for (var i = 0; i < n; ++i) {
+                arr.push(Math.floor(Math.random() * 10));
+              }
+            }, [arr, n])
+            .then(function() {
+              return thread.run(function(arr) {
+                return arr.reduce(function(x, y) { return x + y; });
+              }, [arr]);
+            })
+            .then(function(sum) {
+              return arr.join(',')
+                 .then(function(joined) {
+                   //console.log('sum[' + joined + ']=' + sum);
+                   --count;
+                   if (count == 0) {
+                     //alert('[Multi thread] Time elapsed: ' + (new Date() - startTime));
+                     console.log('[Multi thread] Time elapsed: ' + (new Date() - startTime));
+                   }
+                 });
+            });
+        });
       }
     }
 
@@ -64,7 +64,8 @@
         var joined = arr.join(',');
         //console.log('sum[' + joined + ']=' + sum);
       }
-      alert('[Single thread] Time elapsed: ' + (new Date() - startTime));
+      //alert('[Single thread] Time elapsed: ' + (new Date() - startTime));
+      console.log('[Single thread] Time elapsed: ' + (new Date() - startTime));
     }
   </script>
 </body>
