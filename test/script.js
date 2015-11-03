@@ -7,7 +7,7 @@
 var tp = null;
 
 function start(njobs, n) {
-  tp = tp || new parallel.ThreadPool(1, '/threadpool.js/src/worker/thread.js');
+  tp = tp || new parallel.ThreadPool(16, WORKER);
 
   var count = njobs;
   var startTime = new Date();
@@ -32,7 +32,8 @@ function start(njobs, n) {
         .then(function(sum) {
           return arr.join(',')
             .then(function(joined) {
-              console.log('sum[' + joined + ']=' + sum);
+              // console.log('sum[' + joined + ']=' + sum);
+              // console.log('sum=' + sum);
               --count;
               if (count == 0) {
                 //alert('[Multi thread] Time elapsed: ' + (new Date() - startTime));

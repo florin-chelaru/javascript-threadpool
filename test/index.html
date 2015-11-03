@@ -9,11 +9,14 @@
   <script src="../src/parallel/thread-pool.js"></script>
 </head>
 <body>
-  <button onclick="start(5, 4)">Start</button>
+  <button onclick="start(100, 100000)">Start</button>
   <button onclick="startSameThread(100, 100000)">Start Same Thread</button>
   <button onclick="">Button 2</button>
   <output id="result"></output>
 
+  <script>
+    var WORKER = '/threadpool.js/test/worker.js'
+  </script>
   <script src="script.js"></script>
 </body>
 </html>
