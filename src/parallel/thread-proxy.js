@@ -6,18 +6,21 @@
 
 goog.provide('parallel.ThreadProxy');
 
-goog.require('utils');
 goog.require('parallel.ThreadMessage');
-goog.require('parallel.events.Event');
-goog.require('parallel.shared.ObjectProxy');
-
-goog.require('goog.async.Deferred');
+goog.require('parallel.SharedObject');
 
 /**
  * @param {string|number} id
+ * @param {string} threadJsPath
  * @constructor
  */
-parallel.ThreadProxy = function(id) {
+parallel.ThreadProxy = function(id, threadJsPath) {
+  /**
+   * @type {string}
+   * @private
+   */
+  this._threadJsPath = threadJsPath;
+
   /**
    * @type {string|number}
    * @private
@@ -31,28 +34,10 @@ parallel.ThreadProxy = function(id) {
   this._worker = null;
 
   /**
-   * @type {Object.<number, function>}
-   * @private
-   */
-  this._callbacks = {};
-
-  /**
-   * @type {Object.<number, goog.async.Deferred>}
-   * @private
-   */
-  this._deferreds = {};
-
-  /**
    * @type {number}
    * @private
    */
   this._pendingJobCount = 0;
-
-  /**
-   * @type {number}
-   * @private
-   */
-  this._lastCallbackId = -1;
 
   /**
    * @type {boolean}
@@ -67,134 +52,178 @@ parallel.ThreadProxy = function(id) {
   this._isStarted = false;
 
   /**
-   * @type {Object.<number, parallel.shared.ObjectProxy>}
+   * @type {Object.<number, parallel.SharedObject>}
    * @private
    */
   this._sharedObjects = {};
 
   /**
-   * @type {parallel.events.Event.<parallel.ThreadMessage>}
+   * @type {Promise}
    * @private
    */
-  this._started = new parallel.events.Event();
+  this._start = null;
 
   /**
-   * @type {parallel.events.Event.<parallel.ThreadMessage>}
+   * @type {u.Event.<parallel.ThreadProxy>}
    * @private
    */
-  this._jobFinished = new parallel.events.Event();
+  this._turnedIdle = new u.Event();
 };
 
 /**
+ * @type {string|number}
+ * @name parallel.ThreadProxy#id
+ */
+parallel.ThreadProxy.prototype.id;
+
+/**
+ * @type {boolean}
+ * @name parallel.ThreadProxy#isIdle
+ */
+parallel.ThreadProxy.prototype.isIdle;
+
+/**
+ * @type {boolean}
+ * @name parallel.ThreadProxy#isStarted
+ */
+parallel.ThreadProxy.prototype.isStarted;
+
+/**
+ * @type {u.Event.<parallel.ThreadProxy>}
+ * @name parallel.ThreadProxy#turnedIdle
+ */
+parallel.ThreadProxy.prototype.turnedIdle;
+
+Object.defineProperties(parallel.ThreadProxy.prototype, {
+  'id': { get: /** @type {function (this:parallel.ThreadProxy)} */ (function() { return this._id; })},
+  'isIdle': { get: /** @type {function (this:parallel.ThreadProxy)} */ (function() { return this._isIdle; })},
+  'isStarted': { get: /** @type {function (this:parallel.ThreadProxy)} */ (function() { return this._isStarted; })},
+  'turnedIdle': { get: /** @type {function (this:parallel.ThreadProxy)} */ (function() { return this._turnedIdle; })}
+});
+
+/**
+ * @returns {Promise}
  */
 parallel.ThreadProxy.prototype.start = function() {
-  this._worker = new Worker(PARALLEL_BASE_PATH + 'thread.js');
+  if (this._start) { return this._start; }
 
+  this._worker = new Worker(this._threadJsPath);
   var self = this;
-  this._worker.onmessage = function(e) {
-    self._onMessage(e);
-  };
-
-  this._worker.postMessage(new parallel.ThreadMessage(this._id, ++this._lastCallbackId, 'start'));
+  this._start = new Promise(function(resolve, reject) {
+    self._sendMessage(new parallel.ThreadMessage(self._id, 'start'))
+      .then(function(rsp) { self._isStarted = true; resolve(rsp); }, reject);
+  });
+  return this._start;
 };
 
 /**
- * @returns {boolean}
- */
-parallel.ThreadProxy.prototype.isIdle = function() { return this._isIdle; };
-
-/**
- * @returns {boolean}
- */
-parallel.ThreadProxy.prototype.isStarted = function() { return this._isStarted; };
-
-/**
- * @param {function} func
+ * @param {Function} func
  * @param {Array} [args]
- * @returns {goog.async.Deferred}
+ * @returns {Promise}
  */
 parallel.ThreadProxy.prototype.run = function(func, args) {
-  var id = ++this._lastCallbackId;
-  args = args ? args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
-  var deferred = new goog.async.Deferred();
-  this._deferreds[id] = deferred;
+  var self = this;
   ++this._pendingJobCount;
   this._isIdle = false;
-  this._worker.postMessage(new parallel.ThreadMessage(this._id, id, 'call', { func: func.toString(), args: args }));
-
-  return deferred;
+  return new Promise(function(resolve, reject) {
+    args = args ? args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
+    self._sendMessage(new parallel.ThreadMessage(self._id, 'call', {'func': func.toString(), 'args': args}))
+      .then(
+      function(rsp) {
+        --self._pendingJobCount;
+        self._isIdle = !self._pendingJobCount;
+        resolve(rsp['data']);
+        if (self._isIdle) { self._turnedIdle.fire(self); }
+      },
+      function(rsp) {
+        --self._pendingJobCount;
+        self._isIdle = !self._pendingJobCount;
+        reject(rsp['error']);
+        if (self._isIdle) { self._turnedIdle.fire(self); }
+      }
+    );
+  });
 };
 
 /**
  * @param {string} typeName
  * @param {Array} [args]
- * @returns {parallel.shared.ObjectProxy}
+ * @returns {Promise.<parallel.SharedObject>}
  */
 parallel.ThreadProxy.prototype.createShared = function(typeName, args) {
   var self = this;
-  var ctor = utils.evaluateFullyQualifiedTypeName(typeName);
-  var proxy = new parallel.shared.ObjectProxy(ctor);
-  proxy.__memberCalled.addListener(new parallel.events.EventListener(function(e) {
-    var id = ++self._lastCallbackId;
-    self._deferreds[id] = e.deferred;
-    var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
+  return new Promise(function(resolve, reject) {
+    var ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName);
+    var proxy = new parallel.SharedObject(ctor);
+    proxy.__memberCalled.addListener(function(e) {
+      var objResolve = e.resolve;
+      var objReject = e.reject;
+      var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
+
+      ++self._pendingJobCount;
+      self._isIdle = false;
+      self._sendMessage(new parallel.ThreadMessage(self._id, 'callShared', {
+        'target': e.target['__id'],
+        'method': e.method,
+        'type': e.type,
+        'args': args
+      })).then(
+        function(rsp) {
+          --self._pendingJobCount;
+          self._isIdle = !self._pendingJobCount;
+          objResolve(rsp['data']);
+          if (self._isIdle) { self._turnedIdle.fire(self); }
+        },
+        function(rsp) {
+          --self._pendingJobCount;
+          self._isIdle = !self._pendingJobCount;
+          objReject(rsp['error']);
+          if (self._isIdle) { self._turnedIdle.fire(self); }
+        }
+      );
+    });
+
+    self._sharedObjects[proxy['__id']] = proxy;
+    args = args ? args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
 
     ++self._pendingJobCount;
     self._isIdle = false;
-    self._worker.postMessage(new parallel.ThreadMessage(self._id, id, 'callShared',
-      {
-        target: e.target.__id,
-        method: e.method,
-        args: args
-      }
-    ));
-  }));
-
-  this._sharedObjects[proxy.__id] = proxy;
-  args = args ? args.map(function(arg) { return (arg instanceof parallel.shared.ObjectProxy) ? arg.__strip() : arg; }) : undefined;
-
-  this._worker.postMessage(new parallel.ThreadMessage(this._id, ++this._lastCallbackId, 'createShared', {id: proxy.__id, type: typeName, args: args}));
-
-  return proxy;
+    self._sendMessage(new parallel.ThreadMessage(self._id, 'createShared', {'id': proxy['__id'], 'type': typeName, 'args': args}))
+      .then(
+      function() {
+        --self._pendingJobCount;
+        self._isIdle = !self._pendingJobCount;
+        resolve(proxy);
+        if (self._isIdle) { self._turnedIdle.fire(self); }
+      },
+      function(rsp) {
+        --self._pendingJobCount;
+        self._isIdle = !self._pendingJobCount;
+        reject(rsp);
+        if (self._isIdle) { self._turnedIdle.fire(self); }
+      });
+  });
 };
 
 /**
- * @returns {parallel.events.Event.<parallel.ThreadMessage>}
- */
-parallel.ThreadProxy.prototype.onStarted = function() { return this._started; };
-
-/**
- * @returns {parallel.events.Event.<parallel.ThreadMessage>}
- */
-parallel.ThreadProxy.prototype.onJobFinished = function() { return this._jobFinished; };
-
-/**
- * @param {MessageEvent} e
+ * @param {parallel.ThreadMessage} msg
+ * @returns {Promise}
  * @private
  */
-parallel.ThreadProxy.prototype._onMessage = function(e) {
-  var msg = /** @type {parallel.ThreadMessage} */ e.data;
+parallel.ThreadProxy.prototype._sendMessage = function(msg) {
+  var self = this;
+  return new Promise(function(resolve, reject) {
+    var messageChannel = new MessageChannel();
+    messageChannel.port1.onmessage = function(event) {
+      /** @type {parallel.ThreadMessage} */
+      var rsp = u.reflection.wrap(event.data, parallel.ThreadMessage);
+      if (rsp['error']) {
+        reject(rsp);
+      } else {
+        resolve(rsp);
+      }
+    };
 
-  switch (msg.action) {
-    case 'started':
-      this._isStarted = true;
-      this._started.fire(msg);
-      break;
-    case 'response':
-      /*var callback = this._callbacks[msg.id];
-      if (callback == undefined) { return; }
-
-      delete this._callbacks[msg.id];*/
-      var deferred = this._deferreds[msg.id];
-      if (deferred == undefined) { return; }
-      delete this._deferreds[msg.id];
-
-      --this._pendingJobCount;
-      if (this._pendingJobCount == 0) { this._isIdle = true; }
-      deferred.callback(msg.data);
-
-      this._jobFinished.fire(msg);
-
-      break;
-  }
+    self._worker.postMessage(msg, [messageChannel.port2]);
+  });
 };

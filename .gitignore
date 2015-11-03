@@ -1,3 +1,2 @@
 .idea
-closure-library
-deps.js
+bower_components

@@ -7,31 +7,31 @@
 goog.provide('parallel.ThreadMessage');
 
 /**
- * @param {string|number} threadId
- * @param {number} id
- * @param {string} action
+ * @param {string|number} [threadId]
+ * @param {string} [action]
  * @param {T} [data]
+ * @param {string} [error]
  * @constructor
  * @template T
  */
-parallel.ThreadMessage = function(threadId, id, action, data) {
+parallel.ThreadMessage = function(threadId, action, data, error) {
   /**
-   * @type {string|number}
+   * @type {string|number|undefined}
    */
-  this.threadId = threadId;
+  this['threadId'] = threadId;
 
   /**
-   * @type {number}
+   * @type {string|undefined}
    */
-  this.id = id;
+  this['action'] = action;
 
   /**
-   * @type {string}
+   * @type {T|undefined}
    */
-  this.action = action;
+  this['data'] = data;
 
   /**
-   * @type {T}
+   * @type {string|undefined}
    */
-  this.data = data;
+  this['error'] = error;
 };
