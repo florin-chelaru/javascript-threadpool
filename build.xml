@@ -148,7 +148,7 @@
       <arg line="&#45;&#45;summary_detail_level=3"/>
       <arg line="&#45;&#45;language_in=ECMASCRIPT5_STRICT"/>
       <arg line="&#45;&#45;source_map_format=V3"/>
-      <arg line="&#45;&#45;output_wrapper='(function(){%output%}).call(this); //@ sourceMappingURL=${worker.compiledmin}.map'"/>
+      <arg line="&#45;&#45;output_wrapper='(function(){%output%}).call(this); //# sourceMappingURL=${worker.compiledmin}.map'"/>
       <arg line="&#45;&#45;js_output_file=${worker.outfile}"/>
       <arg line="&#45;&#45;create_source_map=${worker.outfile}.map"/>
       <arg line="&#45;&#45;manage_closure_dependencies"/>
@@ -170,7 +170,7 @@
       <arg line="&#45;&#45;summary_detail_level=3"/>
       <arg line="&#45;&#45;language_in=ECMASCRIPT5_STRICT"/>
       <arg line="&#45;&#45;source_map_format=V3"/>
-      <arg line="&#45;&#45;output_wrapper='(function(){%output%}).call(this); //@ sourceMappingURL=${main.compiledmin}.map'"/>
+      <arg line="&#45;&#45;output_wrapper='(function(){%output%}).call(this); //# sourceMappingURL=${main.compiledmin}.map'"/>
       <arg line="&#45;&#45;js_output_file=${main.outfile}"/>
       <arg line="&#45;&#45;create_source_map=${main.outfile}.map"/>
       <arg line="&#45;&#45;manage_closure_dependencies"/>

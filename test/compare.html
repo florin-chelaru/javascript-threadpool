@@ -2,21 +2,21 @@
 <html>
 <head lang="en">
   <meta charset="UTF-8">
-  <title>threadpool.js tests</title>
-  <link rel="stylesheet" href="//code.jquery.com/qunit/qunit-1.19.0.css">
+  <title>threadpool.js compare</title>
   <script src="../bower_components/utils.js/utils.min.js"></script>
   <script src="../bower_components/google-closure-library/closure/goog/base.js"></script>
   <script src="../deps.js"></script>
   <script src="../src/parallel/thread-pool.js"></script>
 </head>
 <body>
+  <button onclick="start(100, 100000)">Start</button>
+  <button onclick="startSameThread(100, 100000)">Start Same Thread</button>
+  <button onclick="">Button 2</button>
+  <output id="result"></output>
+
   <script>
     var WORKER = '/threadpool.js/test/worker.js'
   </script>
-
-  <div id="qunit"></div>
-  <div id="qunit-fixture"></div>
-  <script src="../bower_components/qunit/qunit/qunit.js"></script>
-  <script src="tests.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
