@@ -29,7 +29,7 @@ QUnit.test('parallel.ThreadPool', function(assert) {
               arr.push(Math.floor(Math.random() * 10)); // an array of integers between 0 and 9
             }
             return arr;
-          }, [arr, n]);
+          }, arr, n);
         })
         .then(function(d) {
           threadArr = d;
@@ -44,7 +44,7 @@ QUnit.test('parallel.ThreadPool', function(assert) {
           return thread.run(function(arr) {
             // Here we are inside the worker, with no access to anything outside the scope
             return arr.reduce(function(x, y) { return x + y; });
-          }, [arr]);
+          }, arr);
         })
         .then(function(sum) {
           assert.ok(sum != undefined, 'sum was generated');
@@ -63,6 +63,69 @@ QUnit.test('parallel.ThreadPool', function(assert) {
     });
   }).then(function() {
     assert.equal(i, njobs, 'all jobs ran');
+    return tp.stopAll();
+  }).then(function() {
+    done();
+  });
+});
+
+QUnit.test('parallel.ThreadProxy.prototype.swap [Array]', function(assert) {
+  var done = assert.async();
+  assert.ok(parallel.ThreadProxy.prototype.swap);
+  var tp = new parallel.ThreadPool(1, WORKER);
+  tp.queue(function(thread) {
+    var arr = [0,1,2,3,4];
+    var sharedArr;
+    return thread.swap(arr, 'Array')
+      .then(function(d) {
+        sharedArr = d;
+        assert.ok(d instanceof parallel.SharedObject);
+        return d.join(',');
+      })
+      .then(function(joined) {
+        assert.equal(joined, arr.join(','));
+        return thread.swap(sharedArr, 'Array');
+      })
+      .then(function(d) {
+        assert.ok(d);
+        assert.ok(Array.isArray(d));
+        assert.deepEqual(d, arr);
+      });
+  }).then(function() {
+    return tp.stopAll();
+  }).then(function() {
+    done();
+  });
+});
+
+QUnit.test('parallel.ThreadProxy.prototype.swap [Mock]', function(assert) {
+  var done = assert.async();
+  assert.ok(parallel.ThreadProxy.prototype.swap);
+  var tp = new parallel.ThreadPool(1, WORKER);
+  tp.queue(function(thread) {
+    var obj = new Mock(20);
+    var sharedObj;
+    return thread.swap(obj, 'Mock')
+      .then(function(d) {
+        sharedObj = d;
+        assert.ok(d instanceof parallel.SharedObject);
+        return d.foo(10);
+      })
+      .then(function(ret) {
+        assert.equal(ret, obj.foo(10));
+        return thread.swap(sharedObj, 'Mock');
+      })
+      .then(function(d) {
+        assert.ok(d);
+        assert.ok(d instanceof Mock);
+        assert.equal(d._x, obj._x);
+        assert.equal(d._bar, obj._bar);
+        assert.equal(d.foo(7), obj.foo(7));
+        assert.equal(d.bar, obj.bar);
+      });
+  }).then(function() {
+    return tp.stopAll();
+  }).then(function() {
     done();
   });
 });

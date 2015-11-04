@@ -18,6 +18,59 @@
 */
 
 
+goog.provide('parallel.ParallelException');
+
+/**
+ * @param {string} message
+ * @param {Error} [innerException]
+ * @constructor
+ * @extends u.Exception
+ */
+parallel.ParallelException = function(message, innerException) {
+  u.Exception.apply(this, arguments);
+
+  /**
+   * @type {string}
+   */
+  this.name = 'ParallelException';
+};
+
+goog.inherits(parallel.ParallelException, u.Exception);
+
+
+goog.provide('parallel.ThreadMessage');
+
+/**
+ * @param {string|number} [threadId]
+ * @param {string} [action]
+ * @param {T} [data]
+ * @param {string} [error]
+ * @constructor
+ * @template T
+ */
+parallel.ThreadMessage = function(threadId, action, data, error) {
+  /**
+   * @type {string|number|undefined}
+   */
+  this['threadId'] = threadId;
+
+  /**
+   * @type {string|undefined}
+   */
+  this['action'] = action;
+
+  /**
+   * @type {T|undefined}
+   */
+  this['data'] = data;
+
+  /**
+   * @type {string|undefined}
+   */
+  this['error'] = error;
+};
+
+
 goog.provide('parallel.SharedObject');
 
 /**
@@ -103,43 +156,11 @@ parallel.SharedObject.prototype.__strip = function() {
 };
 
 
-goog.provide('parallel.ThreadMessage');
-
-/**
- * @param {string|number} [threadId]
- * @param {string} [action]
- * @param {T} [data]
- * @param {string} [error]
- * @constructor
- * @template T
- */
-parallel.ThreadMessage = function(threadId, action, data, error) {
-  /**
-   * @type {string|number|undefined}
-   */
-  this['threadId'] = threadId;
-
-  /**
-   * @type {string|undefined}
-   */
-  this['action'] = action;
-
-  /**
-   * @type {T|undefined}
-   */
-  this['data'] = data;
-
-  /**
-   * @type {string|undefined}
-   */
-  this['error'] = error;
-};
-
-
 goog.provide('parallel.ThreadProxy');
 
 goog.require('parallel.ThreadMessage');
 goog.require('parallel.SharedObject');
+goog.require('parallel.ParallelException');
 
 /**
  * @param {string|number} id
@@ -196,6 +217,12 @@ parallel.ThreadProxy = function(id, threadJsPath) {
   this._start = null;
 
   /**
+   * @type {Promise}
+   * @private
+   */
+  this._stop = null;
+
+  /**
    * @type {u.Event.<parallel.ThreadProxy>}
    * @private
    */
@@ -249,91 +276,159 @@ parallel.ThreadProxy.prototype.start = function() {
 };
 
 /**
+ * @returns {Promise}
+ */
+parallel.ThreadProxy.prototype.stop = function() {
+  if (!this._worker) { return Promise.resolve(); }
+
+  if (this._stop) { return this._stop; }
+
+  var self = this;
+  var cleanUp = function(resolve) {
+    self._worker.terminate();
+    self._worker = null;
+    self._start = null;
+    self._stop = null;
+    resolve();
+  };
+
+  this._stop = new Promise(function(resolve) {
+    self._start.then(
+      function() {
+        return self._sendMessage(new parallel.ThreadMessage(self._id, 'stop'));
+      },
+      function() {
+        // Start did not suceed so we can just clean up
+        cleanUp(resolve);
+      }).then(
+        function() {
+          // Stop finished, so we can terminate the worker
+          cleanUp(resolve);
+        },
+        function() {
+          // Something went wrong; we will forcefully stop the worker now
+          cleanUp(resolve);
+        });
+  });
+  return this._stop;
+};
+
+/**
  * @param {Function} func
- * @param {Array} [args]
+ * @param {...} [args]
  * @returns {Promise}
  */
 parallel.ThreadProxy.prototype.run = function(func, args) {
   var self = this;
-  ++this._pendingJobCount;
-  this._isIdle = false;
+  args = u.array.fromArguments(arguments).slice(1);
   return new Promise(function(resolve, reject) {
     args = args ? args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
     self._sendMessage(new parallel.ThreadMessage(self._id, 'call', {'func': func.toString(), 'args': args}))
       .then(
-      function(rsp) {
-        --self._pendingJobCount;
-        self._isIdle = !self._pendingJobCount;
-        resolve(rsp['data']);
-        if (self._isIdle) { self._turnedIdle.fire(self); }
-      },
-      function(rsp) {
-        --self._pendingJobCount;
-        self._isIdle = !self._pendingJobCount;
-        reject(rsp['error']);
-        if (self._isIdle) { self._turnedIdle.fire(self); }
-      }
-    );
+        function(rsp) { resolve(rsp['data']); },
+        function(rsp) { reject(rsp['error']); });
   });
 };
 
 /**
  * @param {string} typeName
- * @param {Array} [args]
+ * @param {...} [args]
  * @returns {Promise.<parallel.SharedObject>}
  */
 parallel.ThreadProxy.prototype.createShared = function(typeName, args) {
   var self = this;
+  args = u.array.fromArguments(arguments).slice(1);
+
   return new Promise(function(resolve, reject) {
     var ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName);
     var proxy = new parallel.SharedObject(ctor);
-    proxy.__memberCalled.addListener(function(e) {
-      var objResolve = e.resolve;
-      var objReject = e.reject;
-      var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
 
-      ++self._pendingJobCount;
-      self._isIdle = false;
-      self._sendMessage(new parallel.ThreadMessage(self._id, 'callShared', {
-        'target': e.target['__id'],
-        'method': e.method,
-        'type': e.type,
-        'args': args
-      })).then(
-        function(rsp) {
-          --self._pendingJobCount;
-          self._isIdle = !self._pendingJobCount;
-          objResolve(rsp['data']);
-          if (self._isIdle) { self._turnedIdle.fire(self); }
-        },
-        function(rsp) {
-          --self._pendingJobCount;
-          self._isIdle = !self._pendingJobCount;
-          objReject(rsp['error']);
-          if (self._isIdle) { self._turnedIdle.fire(self); }
-        }
-      );
-    });
-
-    self._sharedObjects[proxy['__id']] = proxy;
     args = args ? args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
 
-    ++self._pendingJobCount;
-    self._isIdle = false;
     self._sendMessage(new parallel.ThreadMessage(self._id, 'createShared', {'id': proxy['__id'], 'type': typeName, 'args': args}))
-      .then(
-      function() {
-        --self._pendingJobCount;
-        self._isIdle = !self._pendingJobCount;
+      .then(function() {
+        proxy.__memberCalled.addListener(function(e) {
+          var objResolve = e.resolve;
+          var objReject = e.reject;
+          var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
+
+          self._sendMessage(new parallel.ThreadMessage(self._id, 'callShared', {
+            'target': e.target['__id'],
+            'method': e.method,
+            'type': e.type,
+            'args': args
+          })).then(
+            function(rsp) { objResolve(rsp['data']); },
+            function(rsp) { objReject(rsp['error']); });
+        });
+
+        self._sharedObjects[proxy['__id']] = proxy;
         resolve(proxy);
-        if (self._isIdle) { self._turnedIdle.fire(self); }
-      },
-      function(rsp) {
-        --self._pendingJobCount;
-        self._isIdle = !self._pendingJobCount;
-        reject(rsp);
-        if (self._isIdle) { self._turnedIdle.fire(self); }
+      }, reject);
+  });
+};
+
+/**
+ * @param {*} obj
+ * @param {string} typeName
+ * @param {...} [args]
+ * @returns {Promise.<parallel.SharedObject|*|Array.<parallel.SharedObject|*>>}
+ */
+parallel.ThreadProxy.prototype.swap = function(obj, typeName, args) {
+  var self = this;
+  args = u.array.fromArguments(arguments);
+  return new Promise(function(resolve, reject) {
+    try {
+      if (args.length == 0 || args.length % 2 != 0) { reject('Invalid arguments'); return; }
+
+      // Create proxies for full objects
+      var indices = u.array.range(Math.floor(args.length / 2));
+      var ret = indices.map(function(i) {
+        if (args[i * 2] instanceof parallel.SharedObject) { return null; }
+
+        var ctor = u.reflection.evaluateFullyQualifiedTypeName(args[i * 2 + 1]);
+        return new parallel.SharedObject(ctor);
       });
+
+      var tuples = indices.map(function (i) {
+        return {
+          'id': args[i * 2] instanceof parallel.SharedObject ? args[i * 2]['__id'] : ret[i]['__id'],
+          'object': args[i * 2] instanceof parallel.SharedObject ? undefined : args[i * 2],
+          'type': args[i * 2 + 1]
+        };
+      });
+
+      self._sendMessage(new parallel.ThreadMessage(self._id, 'swap', tuples))
+        .then(function (rsp) {
+          ret = rsp['data'].map(function (o, i) {
+            if (ret[i] instanceof parallel.SharedObject) {
+              var proxy = ret[i];
+              proxy.__memberCalled.addListener(function(e) {
+                var objResolve = e.resolve;
+                var objReject = e.reject;
+                var args = e.args ? e.args.map(function(arg) { return (arg instanceof parallel.SharedObject) ? arg.__strip() : arg; }) : undefined;
+
+                self._sendMessage(new parallel.ThreadMessage(self._id, 'callShared', {
+                  'target': e.target['__id'],
+                  'method': e.method,
+                  'type': e.type,
+                  'args': args
+                })).then(
+                  function(rsp) { objResolve(rsp['data']); },
+                  function(rsp) { objReject(rsp['error']); });
+              });
+
+              self._sharedObjects[proxy['__id']] = proxy;
+              return proxy;
+            }
+
+            return u.reflection.wrap(o, u.reflection.evaluateFullyQualifiedTypeName(args[i * 2 + 1]));
+          });
+          resolve(ret.length == 1 ? ret[0] : ret);
+        }, reject);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
@@ -354,31 +449,16 @@ parallel.ThreadProxy.prototype._sendMessage = function(msg) {
       } else {
         resolve(rsp);
       }
+      --self._pendingJobCount;
+      self._isIdle = !self._pendingJobCount;
+      if (self._isIdle) { self._turnedIdle.fire(self); }
     };
 
+    ++self._pendingJobCount;
+    self._isIdle = false;
     self._worker.postMessage(msg, [messageChannel.port2]);
   });
 };
-
-
-goog.provide('parallel.ParallelException');
-
-/**
- * @param {string} message
- * @param {Error} [innerException]
- * @constructor
- * @extends u.Exception
- */
-parallel.ParallelException = function(message, innerException) {
-  u.Exception.apply(this, arguments);
-
-  /**
-   * @type {string}
-   */
-  this.name = 'ParallelException';
-};
-
-goog.inherits(parallel.ParallelException, u.Exception);
 
 
 goog.provide('parallel.ThreadPool');
@@ -467,6 +547,13 @@ parallel.ThreadPool.prototype.queue = function(job) {
   return new Promise(function(resolve, reject) {
     self._jobs.push({job: job, resolve: resolve, reject: reject});
   });
+};
+
+/**
+ * @returns {Promise}
+ */
+parallel.ThreadPool.prototype.stopAll = function() {
+  return u.async.each(this._threads, function(thread) { return thread.stop(); });
 };
 
 /**

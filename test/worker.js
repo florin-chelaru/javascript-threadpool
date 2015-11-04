@@ -19,4 +19,6 @@ importScripts(
 
 u.log.VERBOSE = 'info';
 
+importScripts(SRC_BASE_PATH + 'mock.js');
+
 importScripts(DOMAIN_BASE_PATH + 'src/worker/thread.js');

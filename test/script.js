@@ -22,12 +22,12 @@ function start(njobs, n) {
               for (var i = 0; i < n; ++i) {
                 arr.push(Math.floor(Math.random() * 10));
               }
-            }, [arr, n]);
+            }, arr, n);
         })
         .then(function() {
           return thread.run(function(arr) {
             return arr.reduce(function(x, y) { return x + y; });
-          }, [arr]);
+          }, arr);
         })
         .then(function(sum) {
           return arr.join(',')

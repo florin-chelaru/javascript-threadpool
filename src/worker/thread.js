@@ -84,6 +84,7 @@ parallel.worker.Thread.prototype._handleMessage = function(e) {
         e.ports[0].postMessage({ 'threadId': this._id });
         break;
       case 'stop':
+        e.ports[0].postMessage({ 'threadId': this._id });
         context.close(); // Terminates the worker.
         break;
       case 'call':
@@ -102,22 +103,36 @@ parallel.worker.Thread.prototype._handleMessage = function(e) {
       case 'createShared':
         var objId = msg['data']['id'];
         var typeName = msg['data']['type'];
-        var ctor = null;
-
-        /*try {
-          ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName, context);
-        } catch (err) {
-          goog.require(typeName);
-          ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName, context);
-        }*/
-        ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName, context);
-
+        var ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName, context);
         var obj = u.reflection.applyConstructor(ctor, args);
         self._sharedObjects[objId] = {typeName: typeName, type: ctor, object: obj};
 
         // success
         e.ports[0].postMessage({ 'threadId': this._id });
         break;
+
+      case 'swap':
+        var tuples = msg['data'];
+        var newSharedObjects = {};
+        var ret = tuples.map(function(tuple) {
+          var obj = tuple['object'];
+          var objId = tuple['id'];
+          if (obj === undefined) {
+            return self._sharedObjects[objId]['object'];
+          }
+          var typeName = tuple['type'];
+          var ctor = u.reflection.evaluateFullyQualifiedTypeName(typeName, context);
+          var o = u.reflection.wrap(obj, ctor);
+          newSharedObjects[objId] = {typeName: typeName, type: ctor, object: o};
+          return {'__id': objId};
+        });
+        u.extend(self._sharedObjects, newSharedObjects);
+        e.ports[0].postMessage({
+          'threadId': this._id,
+          'data': ret
+        });
+        break;
+
       case 'callShared':
         var shared = self._sharedObjects[msg['data']['target']];
         if (!shared) {

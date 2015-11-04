@@ -5,4 +5,4 @@ goog.addDependency('../../../../src/parallel/parallel.js', ['parallel'], ['paral
 goog.addDependency('../../../../src/parallel/shared-object.js', ['parallel.SharedObject'], [], false);
 goog.addDependency('../../../../src/parallel/thread-message.js', ['parallel.ThreadMessage'], [], false);
 goog.addDependency('../../../../src/parallel/thread-pool.js', ['parallel.ThreadPool'], ['parallel.ParallelException', 'parallel.SharedObject', 'parallel.ThreadProxy'], false);
-goog.addDependency('../../../../src/parallel/thread-proxy.js', ['parallel.ThreadProxy'], ['parallel.SharedObject', 'parallel.ThreadMessage'], false);
+goog.addDependency('../../../../src/parallel/thread-proxy.js', ['parallel.ThreadProxy'], ['parallel.ParallelException', 'parallel.SharedObject', 'parallel.ThreadMessage'], false);

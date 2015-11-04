@@ -93,6 +93,13 @@ parallel.ThreadPool.prototype.queue = function(job) {
 };
 
 /**
+ * @returns {Promise}
+ */
+parallel.ThreadPool.prototype.stopAll = function() {
+  return u.async.each(this._threads, function(thread) { return thread.stop(); });
+};
+
+/**
  * @param {parallel.ThreadProxy} thread
  * @private
  */
