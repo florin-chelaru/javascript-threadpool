@@ -193,4 +193,4 @@ parallel.worker.Thread.prototype._handleMessage = function(e) {
   }
 };
 
-new parallel.worker.Thread(self);
+self['thread'] = new parallel.worker.Thread(self);

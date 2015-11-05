@@ -18,59 +18,6 @@
 */
 
 
-goog.provide('parallel.ParallelException');
-
-/**
- * @param {string} message
- * @param {Error} [innerException]
- * @constructor
- * @extends u.Exception
- */
-parallel.ParallelException = function(message, innerException) {
-  u.Exception.apply(this, arguments);
-
-  /**
-   * @type {string}
-   */
-  this.name = 'ParallelException';
-};
-
-goog.inherits(parallel.ParallelException, u.Exception);
-
-
-goog.provide('parallel.ThreadMessage');
-
-/**
- * @param {string|number} [threadId]
- * @param {string} [action]
- * @param {T} [data]
- * @param {string} [error]
- * @constructor
- * @template T
- */
-parallel.ThreadMessage = function(threadId, action, data, error) {
-  /**
-   * @type {string|number|undefined}
-   */
-  this['threadId'] = threadId;
-
-  /**
-   * @type {string|undefined}
-   */
-  this['action'] = action;
-
-  /**
-   * @type {T|undefined}
-   */
-  this['data'] = data;
-
-  /**
-   * @type {string|undefined}
-   */
-  this['error'] = error;
-};
-
-
 goog.provide('parallel.SharedObject');
 
 /**
@@ -154,6 +101,59 @@ parallel.SharedObject.LAST_ID = -1;
 parallel.SharedObject.prototype.__strip = function() {
   return {'__id': this['__id']};
 };
+
+
+goog.provide('parallel.ThreadMessage');
+
+/**
+ * @param {string|number} [threadId]
+ * @param {string} [action]
+ * @param {T} [data]
+ * @param {string} [error]
+ * @constructor
+ * @template T
+ */
+parallel.ThreadMessage = function(threadId, action, data, error) {
+  /**
+   * @type {string|number|undefined}
+   */
+  this['threadId'] = threadId;
+
+  /**
+   * @type {string|undefined}
+   */
+  this['action'] = action;
+
+  /**
+   * @type {T|undefined}
+   */
+  this['data'] = data;
+
+  /**
+   * @type {string|undefined}
+   */
+  this['error'] = error;
+};
+
+
+goog.provide('parallel.ParallelException');
+
+/**
+ * @param {string} message
+ * @param {Error} [innerException]
+ * @constructor
+ * @extends u.Exception
+ */
+parallel.ParallelException = function(message, innerException) {
+  u.Exception.apply(this, arguments);
+
+  /**
+   * @type {string}
+   */
+  this.name = 'ParallelException';
+};
+
+goog.inherits(parallel.ParallelException, u.Exception);
 
 
 goog.provide('parallel.ThreadProxy');
