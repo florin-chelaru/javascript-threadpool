@@ -153,11 +153,12 @@
       <arg line="&#45;&#45;create_source_map=${worker.outfile}.map"/>
       <arg line="&#45;&#45;manage_closure_dependencies"/>
       <arg line="&#45;&#45;externs=${externs}"/>
+      <arg line="&#45;&#45;js ${rootpath}/LICENSE"/>
       <arg line="${srcfiles}"/>
       <arg line="${exportfiles}"/>
     </java>
-    <loadfile srcfile="${worker.compiledmin}" property="minimized"/>
-    <concat destfile="${worker.compiledmin}" eol="lf"><header filtering="no" trimleading="yes">${license}</header>${minimized}</concat>
+    <!--<loadfile srcfile="${worker.compiledmin}" property="minimized"/>
+    <concat destfile="${worker.compiledmin}" eol="lf"><header filtering="no" trimleading="yes">${license}</header>${minimized}</concat>-->
   </target>
 
   <target name="main.compile" depends="main.deps,main.concat" description="">
@@ -175,10 +176,11 @@
       <arg line="&#45;&#45;create_source_map=${main.outfile}.map"/>
       <arg line="&#45;&#45;manage_closure_dependencies"/>
       <arg line="&#45;&#45;externs=${externs}"/>
+      <arg line="&#45;&#45;js ${rootpath}/LICENSE"/>
       <arg line="${srcfiles}"/>
       <arg line="${exportfiles}"/>
     </java>
-    <loadfile srcfile="${main.compiledmin}" property="minimized"/>
-    <concat destfile="${main.compiledmin}" eol="lf"><header filtering="no" trimleading="yes">${license}</header>${minimized}</concat>
+    <!--<loadfile srcfile="${main.compiledmin}" property="minimized"/>
+    <concat destfile="${main.compiledmin}" eol="lf"><header filtering="no" trimleading="yes">${license}</header>${minimized}</concat>-->
   </target>
 </project>
